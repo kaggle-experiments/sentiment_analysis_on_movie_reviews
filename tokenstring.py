@@ -58,7 +58,7 @@ class TokenString(list):
         return len(self.tokenized_string)
     
     def __iter__(self):
-        return self.tokenized_string
+        return self.tokenized_string.__iter__()
 
     def index(self, subspan, start_at=0, stop_at=-1):
         window = self.tokenized_string[start_at: stop_at]
