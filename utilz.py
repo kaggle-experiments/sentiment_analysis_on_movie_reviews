@@ -6,17 +6,15 @@ import logging
 log.setLevel(logging.INFO)
 
 from collections import namedtuple, defaultdict
-
+"""
 from nltk.tokenize import WordPunctTokenizer
 word_punct_tokenizer = WordPunctTokenizer()
 word_tokenize = word_punct_tokenizer.tokenize
+"""
 
+from tokenizer import word_tokenize
 
-
-RLABELS = ['NEUTRAL', 'ADVERSE', 'INDICATION']
-ELABELS = ['O', 'B-Disease', 'B-Drug', 'I-Disease', 'I-Drug', 'L-Disease', 'L-Drug', 'U-Disease', 'U-Drug']
 VOCAB =  ['PAD', 'UNK', 'EOS']
-
 PAD = VOCAB.index('PAD')
 
 """
@@ -25,10 +23,8 @@ PAD = VOCAB.index('PAD')
 """
 
 
-RawSample = namedtuple('RawSample', ['id','sentence',  'diseases', 'drugs', 'ae'])
-EntitySample = namedtuple('Sample', ['id','tokens', 'labels'])
-RelationSample = namedtuple('Sample', ['id', 'tokens', 'entity1', 'entity2', 'relation'])
-
+RawSample = namedtuple('RawSample', ['id','sentence_id',  'sentence', 'sentiment'])
+SentimentSample = namedtuple('Sample', ['id','sentence_id',  'tokens', 'sentiment'])
 
 """
 Logging utils
@@ -129,81 +125,3 @@ class ListTable(list):
         log.debug('number of lines: {}'.format(len(lines)))
         return '\n'.join(lines + ['\n'])
             
-def lcm(x, y):
-   lcm = x if x > y else y 
-   while not (lcm % x == 0 and lcm % y == 0):  lcm += 1
-   return lcm
-
-
-"""
-Dataset Utils
-"""
-
-def tokenized_indices(tokens, subspan, condition=lambda x, y: x == y, start_at=0):
-    log.debug(pformat(tokens))
-    log.debug(pformat(subspan))
-    subspan_len = len(subspan)
-    tokens_len = len(tokens)
-    _subspan_len = 0
-    index = start_at
-    log.debug(locals())
-    try:
-        while index < tokens_len and not _subspan_len == subspan_len:
-            _subspan_len = 0
-            log.debug('index,_subspan_len: {}, {}'.format(index, _subspan_len))
-            log.debug('{} ==> {} '.format(tokens[index + _subspan_len], subspan[_subspan_len]))
-            while (_subspan_len < subspan_len
-                   and index < len(tokens)
-                   and condition(tokens[index + _subspan_len], subspan[_subspan_len])):
-                log.debug('index: {} _subspan: {} '.format(index, _subspan_len))
-                log.debug('  {} ==> {} '.format(tokens[index + _subspan_len], subspan[_subspan_len]))
-                _subspan_len += 1
-
-            index += 1
-
-        index -= 1
-        if index < len(tokens) - subspan_len:
-            log.debug('returing ({}, {})'.format(index, index + _subspan_len))
-            return index, index + _subspan_len
-    except KeyboardInterrupt:
-        return
-    except:
-        log.exception(pformat(locals()))
-        return
-
-def dataset_statistics(dataset):
-    samples = defaultdict(defaultdict)
-    seq_length_histogram = defaultdict(int)
-
-def single_token_samples(dataset):
-    samples = []
-    for sample in dataset:
-        if all( [len(word_tokenize(d)) == 1 for d in sample.drugs.split(',')]  )  and all( [len(word_tokenize(d)) == 1 for d in sample.diseases.split(',')]):
-                 samples.append(sample)
-
-    return samples
-
-
-# dataset is list of Sample objects
-@logger
-def build_drug_dictionary(dataset):
-    log.info('build_drug_dictinary')
-    drugs = defaultdict(int)
-    for i, sample in enumerate(dataset):
-        for drug in sample.drugs.split(','):
-            drugs[drug] += 1
-        
-    return dict(drugs)
-
-@logger
-def build_disease_dictionary(dataset):
-    diseases = defaultdict(int)
-    samples = [s for s in dataset if ',' in s.diseases]
-    for i, sample in enumerate(samples):
-        for disease in sample.diseases.split(','):
-            diseases[disease] += 1
-               
-    return dict(diseases)
-        
-def build_drug_disease_mapping(dataset):
-    pass
