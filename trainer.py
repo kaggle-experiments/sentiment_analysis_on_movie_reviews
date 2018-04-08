@@ -48,8 +48,12 @@ class Averager(list):
         
     @property
     def avg(self):
-        return sum(self)/len(self)
-        
+        if len(self):
+            return sum(self)/len(self)
+        else:
+            return 0
+
+
     def __str__(self):
         if len(self) > 0:
             return 'min/max/avg/latest: {:0.5f}/{:0.5f}/{:0.5f}/{:0.5f}'.format(min(self), max(self), self.avg, self[-1])
@@ -57,8 +61,11 @@ class Averager(list):
         return '<empty>'
 
     def append(self, a):
-        super(Averager, self).append(a.data[0])
-
+        try:
+            super(Averager, self).append(a.data[0])
+        except:
+            super(Averager, self).append(a)
+            
     def empty(self):
         del self[:]
 
@@ -66,21 +73,18 @@ class Averager(list):
         if self.filename:
             with open(self.filename, 'a') as f:
                 f.write(self.__str__() + '\n')
-    
-class Snapshot(list):
-    def __init__(self, filepath='snapshot.pth'):
-        self.filepath = filepath
-    def save(self):
-        try:
-            log.info('saving the best model to file {}'.format(self.filepath))
-            torch.save(self.best_model(), self.filepath)
-            log.info('saved.')
-        except:
-            log.exception('unable to save snapshot of the best model')
 
-    def best_model(self):
-        sorted(self, key=lambda i: i[0])[0][1]
+class EpochAverager(Averager):
+    def __init__(self, filename=None, *args, **kwargs):
+        super(EpochAverager, self).__init__(*args, **kwargs)
+        self.epoch_cache = Averager(filename, *args, *kwargs)
 
+    def cache(self, a):
+        self.epoch_cache.append(a)
+
+    def clear_cache(self):
+        super(EpochAverager, self).append(self.epoch_cache.avg)
+        self.epoch_cache.empty()
         
 class Trainer(object):
     def __init__(self, name, runner=None, model=None,
@@ -92,32 +96,33 @@ class Trainer(object):
                  epochs=10000, checkpoint=1,
                  directory='results',
                  *args, **kwargs):
-        
+
+        self.name  = name
         self.__build_model_group(runner, model, *args, **kwargs)
         self.__build_feeder(feeder, *args, **kwargs)
 
         self.epochs     = epochs
         self.checkpoint = checkpoint
 
-        self.optimizer     = optimizer     if optimizer     else optim.SGD(self.runner.model.parameters(), lr=0.01, momentum=0.1)
+        self.optimizer     = optimizer     if optimizer     else optim.SGD(self.runner.model.parameters(), lr=0.001, momentum=0.1)
 
         # necessary metrics
-        self.train_loss = Averager(filename = '{}/{}.{}.{}'.format(directory, name, 'metrics',  'train_loss'))
-        self.test_loss  = Averager(filename = '{}/{}.{}.{}'.format(directory, name, 'metrics', 'test_loss'))
+        self.train_loss = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, name, 'metrics',  'train_loss'))
+        self.test_loss  = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, name, 'metrics', 'test_loss'))
         self.accuracy_function = accuracy_function if accuracy_function else self._default_accuracy_function
 
-        self.accuracy   = Averager(filename = '{}/{}.{}.{}'.format(directory, name, 'metrics', 'accuracy'))
+        self.accuracy   = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, name, 'metrics', 'accuracy'))
         self.loss_function = loss_function if loss_function else nn.NLLLoss()
 
         # optional metrics
         self.f1score_function = f1score_function
-        self.precision = Averager(filename = '{}/{}.{}.{}'.format(directory, name, 'metrics', 'precision'))
-        self.recall = Averager(filename = '{}/{}.{}.{}'.format(directory, name, 'metrics', 'recall'))
-        self.f1score   = Averager(filename = '{}/{}.{}.{}'.format(directory, name, 'metrics', 'f1score'))
+        self.precision = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, name, 'metrics', 'precision'))
+        self.recall = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, name, 'metrics', 'recall'))
+        self.f1score   = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, name, 'metrics', 'f1score'))
 
         self.metrics = [self.train_loss, self.test_loss, self.accuracy, self.precision, self.recall, self.f1score]
         
-        self.model_snapshots = Snapshot()
+        self.best_model = (0, None)
         
 
     def __build_model_group(self, runner, model, *args, **kwargs):
@@ -130,6 +135,10 @@ class Trainer(object):
     def __build_feeder(self, feeder, *args, **kwargs):
         assert feeder is not None, 'feeder is None, fatal error'
         self.feeder = feeder
+
+    def save_best_model(self):
+        log.info('saving the last best model...')
+        torch.save(self.best_model[1], '{}.{}'.format(self.name, '.pth'))
         
     def train(self, test_drive=False):
         self.runner.model.train()
@@ -138,6 +147,7 @@ class Trainer(object):
 
             if self.do_every_checkpoint(epoch) == FLAGS.STOP_TRAINING:
                 log.info('loss trend suggests to stop training')
+                self.save_best_model()
                 return
             
             for j in tqdm(range(self.feeder.train.num_batch)):
@@ -153,9 +163,6 @@ class Trainer(object):
                 if test_drive and j >= test_drive:
                     log.info('-- {} -- loss: {}'.format(epoch, self.train_loss))
                     return
-
-                del _, i, t
-                del output, loss
             
             log.info('-- {} -- loss: {}'.format(epoch, self.train_loss))            
             
@@ -163,53 +170,52 @@ class Trainer(object):
             for m in self.metrics:
                 m.write_to_file()
                 
-        self.model_snapshots.save()
         self.runner.model.eval()
+        return True
         
     def do_every_checkpoint(self, epoch, early_stopping=True):
         if epoch % self.checkpoint != 0:
             return
         self.runner.model.eval()
-        self.test_loss.empty()
-        self.accuracy.empty()
         for j in tqdm(range(self.feeder.test.num_batch)):
             _, i, t = self.feeder.train.next_batch()
             output =  self.runner.run(i)
 
             loss = self.loss_function(output, t)
-            self.test_loss.append(loss)
+            self.test_loss.cache(loss)
             accuracy = self.accuracy_function(output, t)
-            self.accuracy.append(accuracy)
+            self.accuracy.cache(accuracy)
 
             if self.f1score_function:
                 precision, recall, f1score = self.f1score_function(output, t)
                 self.precision.append(precision)
                 self.recall.append(recall)
                 self.f1score.append(f1score)
-            del output, loss, accuracy
-            del _, i, t
-            
-        log.info('-- {} -- loss: {}, accuracy: {}'.format(epoch, self.test_loss, self.accuracy))
+
+                
+        log.info('-- {} -- loss: {}, accuracy: {}'.format(epoch, self.test_loss.epoch_cache, self.accuracy.epoch_cache))
         log.info('-- {} -- precision: {}'.format(epoch, self.precision))
         log.info('-- {} -- recall: {}'.format(epoch, self.recall))
         log.info('-- {} -- f1score: {}'.format(epoch, self.f1score))
 
-        self.model_snapshots.append((self.test_loss.avg, self.runner.model.state_dict()))
+        self.test_loss.clear_cache()
+        self.accuracy.clear_cache()
         if early_stopping:
             return self.loss_trend()
 
+        if self.best_model[0] < self.accuracy.avg:
+            self.best_model = (self.accuracy.avg, self.runner.model.state_dict())
 
     def loss_trend(self):
         if len(self.test_loss) > 4:
-
-            losses = self.test_loss[-3:]
+            losses = self.test_loss[-4:]
             count = 0
             for l, r in zip(losses, losses[1:]):
                 if l < r:
                     count += 1
-            else:
-                if count > 2:
-                    return FLAGS.STOP_TRAINING
+                    
+            if count > 2:
+                return FLAGS.STOP_TRAINING
 
         return FLAGS.CONTINUE_TRAINING
 
