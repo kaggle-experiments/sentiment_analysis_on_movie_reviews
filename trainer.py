@@ -104,7 +104,7 @@ class Trainer(object):
         self.epochs     = epochs
         self.checkpoint = checkpoint
 
-        self.optimizer     = optimizer     if optimizer     else optim.SGD(self.runner.model.parameters(), lr=0.001, momentum=0.1)
+        self.optimizer     = optimizer     if optimizer     else optim.SGD(self.runner.model.parameters(), lr=0.01, momentum=0.1)
 
         # necessary metrics
         self.train_loss = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, name, 'metrics',  'train_loss'))
@@ -122,7 +122,7 @@ class Trainer(object):
 
         self.metrics = [self.train_loss, self.test_loss, self.accuracy, self.precision, self.recall, self.f1score]
         
-        self.best_model = (0, None)
+        self.best_model = (0,  self.runner.model.state_dict())
         
 
     def __build_model_group(self, runner, model, *args, **kwargs):
@@ -137,8 +137,8 @@ class Trainer(object):
         self.feeder = feeder
 
     def save_best_model(self):
-        log.info('saving the last best model...')
-        torch.save(self.best_model[1], '{}.{}'.format(self.name, '.pth'))
+        log.info('saving the last best model... to {} with accuracy: {}'.format( '{}.{}'.format(self.name, 'pth'), self.best_model[0]))
+        torch.save(self.best_model[1], '{}.{}'.format(self.name, 'pth'))
         
     def train(self, test_drive=False):
         self.runner.model.train()
@@ -194,27 +194,31 @@ class Trainer(object):
 
                 
         log.info('-- {} -- loss: {}, accuracy: {}'.format(epoch, self.test_loss.epoch_cache, self.accuracy.epoch_cache))
-        log.info('-- {} -- precision: {}'.format(epoch, self.precision))
-        log.info('-- {} -- recall: {}'.format(epoch, self.recall))
-        log.info('-- {} -- f1score: {}'.format(epoch, self.f1score))
+        if self.f1score_function:
+            log.info('-- {} -- precision: {}'.format(epoch, self.precision))
+            log.info('-- {} -- recall: {}'.format(epoch, self.recall))
+            log.info('-- {} -- f1score: {}'.format(epoch, self.f1score))
 
         self.test_loss.clear_cache()
         self.accuracy.clear_cache()
+        
+        log.info('{} < {} ?'.format(self.best_model[0], self.accuracy[-1]))
+        if self.best_model[0] <= self.accuracy[-1]:
+            log.info('Yes. best model bested the best model')
+            self.best_model = (self.accuracy[-1], self.runner.model.state_dict())
+        
         if early_stopping:
             return self.loss_trend()
 
-        if self.best_model[0] < self.accuracy.avg:
-            self.best_model = (self.accuracy.avg, self.runner.model.state_dict())
-
-    def loss_trend(self):
-        if len(self.test_loss) > 4:
-            losses = self.test_loss[-4:]
+    def loss_trend(self, falloff = 15):
+        if len(self.test_loss) > falloff:
+            losses = self.test_loss[-falloff:]
             count = 0
             for l, r in zip(losses, losses[1:]):
                 if l < r:
                     count += 1
                     
-            if count > 2:
+            if count > falloff-1:
                 return FLAGS.STOP_TRAINING
 
         return FLAGS.CONTINUE_TRAINING
@@ -253,5 +257,5 @@ class Predictor(object):
         output = self.runner.run(i)
         results = ListTable()
         results.extend( self.repr_function(output, self.feed, batch_index) )
-        output_ = output.data
+        output_ = output
         return output_, results
