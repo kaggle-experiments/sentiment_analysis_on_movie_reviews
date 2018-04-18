@@ -1,8 +1,9 @@
 from config import Config
 from pprint import pprint, pformat
-from logger import datafeed_logger
-log = datafeed_logger.getLogger('main')
-log.setLevel(Config.Log.DATAFEED.level)
+from pprint import pprint, pformat
+import logging
+log = logging.getLogger('main')
+log.setLevel(logging.DEBUG)
 
 import random
 

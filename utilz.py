@@ -1,9 +1,9 @@
 from config import Config
 from pprint import pprint, pformat
-from logger import utilz_logger
-log = utilz_logger.getLogger('main')
+from pprint import pprint, pformat
 import logging
-log.setLevel(logging.INFO)
+log = logging.getLogger('main')
+log.setLevel(logging.DEBUG)
 
 from collections import namedtuple, defaultdict
 

@@ -1,9 +1,11 @@
 import logging
 from config import Config
 from pprint import pprint, pformat
-from logger import trainer_logger
-log = trainer_logger.getLogger('main')
-log.setLevel(Config.Log.TRAINER.level)
+
+from pprint import pprint, pformat
+import logging
+log = logging.getLogger('main')
+log.setLevel(logging.DEBUG)
 
 #log.setLevel(logging.DEBUG)
 

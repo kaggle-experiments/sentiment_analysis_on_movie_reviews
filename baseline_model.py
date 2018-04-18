@@ -9,7 +9,6 @@ log.setLevel(logging.DEBUG)
 
 from config import Config
 
-from logger import model_logger
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.autograd import Variable
@@ -195,8 +194,8 @@ class BiLSTMDecoderModel(nn.Module):
 
         #self.classify = nn.Linear(2*self.hidden_dim, self.output_vocab_size)
         
-        self.log = model_logger.getLogger('model')
-        self.size_log = self.log.getLogger('size')
+        self.log = logging.getLogger('model')
+        self.size_log = logging.getLogger('model.size')
         self.log.setLevel(logging.DEBUG)
         self.size_log.setLevel(logging.INFO)
             
