@@ -4,7 +4,7 @@ import logging
 from pprint import pprint, pformat
 logging.basicConfig(format="%(levelname)-8s:%(filename)s.%(funcName)20s >>   %(message)s")
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 class TokenString(list):
 
@@ -60,7 +60,10 @@ class TokenString(list):
     def __iter__(self):
         return self.tokenized_string.__iter__()
 
-    def index(self, subspan, start_at=0, stop_at=-1):
+    def index(self, subspan, start_at=0, stop_at=None):
+        watchdog = 0
+        if not stop_at:
+            stop_at = len(self)
         window = self.tokenized_string[start_at: stop_at]
         if isinstance(subspan, str):
             subspan = self.tokenize(subspan)
@@ -75,20 +78,28 @@ class TokenString(list):
                 log.debug('found subspan[0] at {}'.format(start_idx))
                 offset = 0
                 while start_idx + offset < len(window) and offset < len(subspan) and window[start_idx+offset] == subspan[offset]:
+                    log.debug('{} == {}'.format(window[start_idx+offset], subspan[offset]))
+                    log.debug('{}, {}'.format(start_idx, offset))
                     offset += 1
-
+                    watchdog += 1
+                    if watchdog > len(window):
+                        log.error(pformat(locals()))
+                        return
+                    
                 if offset == len(subspan):
                     log.debug('subspan found : {}, {}'.format(start_at+start_idx,
                                                               start_at+start_idx+offset))
                     return (start_at+start_idx, start_at+start_idx+offset)
                 
                 if not subspan[0] in window[start_idx+offset:]:
+                    log.debug(locals())
                     log.debug('subspan not found after start_idx: {}'.format(start_idx+1))
                     log.debug(pformat(window[start_idx+offset:]))
                     return
- 
-                start_idx += window[start_idx + offset:].index(subspan[0])
-                
+
+                start_idx += offset
+                start_idx += window[start_idx:].index(subspan[0])
+
     
     def indices(self, item):
         _indices = []
@@ -110,3 +121,20 @@ class TokenString(list):
             i = self.index(key)
             if i:
                 self.tokenized_string[slice(*i)]  = value   
+
+
+    def delete_whitespace(self):
+        self.tokenized_string = [i for i in self.tokenized_string
+                                 if not i.isspace()]
+
+        return self
+
+
+import sys
+from tokenizer import word_tokenize
+if __name__ == '__main__':
+
+    t = TokenString(sys.argv[1], word_tokenize).delete_whitespace()
+    s = TokenString(sys.argv[2], word_tokenize).delete_whitespace()
+
+    print(s in t)
