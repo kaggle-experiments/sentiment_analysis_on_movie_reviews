@@ -6,13 +6,13 @@ import logging
 log.setLevel(logging.INFO)
 
 from collections import namedtuple, defaultdict
-"""
+
 from nltk.tokenize import WordPunctTokenizer
 word_punct_tokenizer = WordPunctTokenizer()
 word_tokenize = word_punct_tokenizer.tokenize
 """
-
 from tokenizer import word_tokenize
+"""
 
 VOCAB =  ['PAD', 'UNK', 'EOS']
 PAD = VOCAB.index('PAD')
@@ -125,3 +125,22 @@ class ListTable(list):
         log.debug('number of lines: {}'.format(len(lines)))
         return '\n'.join(lines + ['\n'])
             
+"""
+heatmap
+"""
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.rc('figure', figsize=(10, 5))
+
+def heatmap(mat, filepath, xticks=[], yticks=[],  title='', xlabel='', ylabel=''):
+    plt.matshow(mat, cmap='hot')
+    plt.title(title)
+    if xticks: plt.xticks(*xticks, rotation=90)
+    if yticks: plt.yticks(*yticks, rotation=90)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.colorbar()
+    plt.savefig(filepath)
+    plt.close()
+    return 
