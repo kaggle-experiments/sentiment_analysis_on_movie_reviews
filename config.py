@@ -10,8 +10,8 @@ class Base(metaclass=ConfigMeta):
 class Config(Base):
     split_ratio = 0.90
     input_vocab_size = 30000
-    hidden_dim = 300
-    embed_dim = 400
+    hidden_dim = 200
+    embed_dim = 200
     batch_size = 2
     cuda = True
     tqdm = True
